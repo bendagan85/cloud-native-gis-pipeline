@@ -1,18 +1,75 @@
-name: Deploy to AWS
+name: CI/CD Pipeline with Security & Testing
 
 on:
   push:
     branches:
-      - main  # הצינור ירוץ רק כשדוחפים ל-main
+      - main
 
 env:
   ECR_REPOSITORY: asterra-geo-app
-  LAMBDA_FUNCTION_NAME: dev-geo-processor # וודא שזה תואם לשם ב-Terraform
+  LAMBDA_FUNCTION_NAME: dev-geo-processor
 
 jobs:
-  deploy:
+  # --- שלב 1: בדיקות אבטחה ואינטגרציה (לפני הענן) ---
+  integration-test-and-security:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
+      # 1. בניית האימג' באופן מקומי לצורך הבדיקה
+      - name: Build Docker Image locally
+        run: docker build -t local-test:latest ./app
+
+      # 2. סריקת אבטחה (Trivy)
+      # בודק אם יש חולשות אבטחה קריטיות בקונטיינר
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'local-test:latest'
+          format: 'table'
+          exit-code: '1' # מכשיל את הריצה אם נמצאו בעיות
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # 3. הרמת קלאסטר קוברנטיס מקומי (Kind)
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.4.0
+
+      # 4. טעינת האימג' לתוך הקלאסטר
+      - name: Load Image into Kind
+        run: |
+          kind load docker-image local-test:latest
+
+      # 5. בדיקת הרצה (Smoke Test)
+      # מרימים Postgres זמני ואת האפליקציה כדי לראות שהיא עולה ולא קורסת
+      - name: Run Smoke Test on Kind
+        run: |
+          # הרמת DB זמני
+          kubectl run postgres --image=postgres:13 --env="POSTGRES_PASSWORD=test" --env="POSTGRES_DB=testdb" --expose --port=5432
+          kubectl wait --for=condition=Ready pod/postgres --timeout=60s
+
+          # הרמת האפליקציה שלנו (משתמשים ב-kubectl run פשוט לצורך הבדיקה)
+          kubectl run app-test --image=local-test:latest --image-pull-policy=Never \
+            --env="DB_HOST=postgres" \
+            --env="DB_USER=postgres" \
+            --env="DB_PASS=test" \
+            --env="DB_NAME=testdb"
+
+          # מחכים לראות שהפוד מצליח לעלות (Running) ולא נכנס ל-CrashLoopBackOff
+          # הערה: מכיוון שזו אפליקציה שמסיימת לרוץ מהר, אנחנו בודקים שהיא לא נכשלה מיידית
+          sleep 10
+          kubectl get pods
+          
+          # אם הפוד במצב Error או CrashLoopBackOff, הפקודה הזו תכשיל את הפייפליין
+          kubectl get pod app-test | grep -v "Error" | grep -v "CrashLoopBackOff"
+
+  # --- שלב 2: פריסה לענן (רץ רק אם שלב 1 עבר) ---
+  deploy-to-aws:
+    needs: integration-test-and-security # <--- זה החלק הקריטי!
+    runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
@@ -31,19 +88,15 @@ jobs:
     - name: Build, tag, and push image to Amazon ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }} # משתמשים ב-Hash של הקומיט כגרסה
+        IMAGE_TAG: ${{ github.sha }}
       run: |
-        # בניית הקונטיינר
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./app
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./app
-        
-        # דחיפה ל-ECR
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
     - name: Update Lambda Code
       run: |
-        # מעדכן את הלמבדה להשתמש בגרסה החדשה שהרגע בנינו
         aws lambda update-function-code \
           --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
           --image-uri ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
