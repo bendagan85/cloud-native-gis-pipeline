@@ -5,13 +5,13 @@
 
 **Geo-SRE** is a production-grade, event-driven DevOps project designed to ingest, validate, and visualize geospatial data automatically.
 
-Unlike standard web apps, this project focuses on **Infrastructure reliability, Security, and Automation**. It features a "Zero-Touch" workflow where data uploaded to S3 triggers a complex chain of events, processed securely inside a private Kubernetes network, and visualized in real-time.
+The system features a **Zero-Touch workflow**: Data uploaded to S3 triggers a complex chain of events—processed securely inside a private Kubernetes network and visualized in real-time.
 
 ---
 
 ## 🏗️ Architecture & Infrastructure
 
-The entire environment is provisioned via **Terraform** (IaC) and follows strict security best practices, including Private Subnets and Least Privilege IAM Roles.
+The entire environment is provisioned via **Terraform** (IaC) and follows strict security best practices, including network isolation in Private Subnets and Least Privilege IAM Roles.
 
 ### High-Level Data Flow
 
@@ -27,35 +27,35 @@ The entire environment is provisioned via **Terraform** (IaC) and follows strict
 
 ### 📂 Project Structure
 
-*Organized for maintainability using Helm Charts for Kubernetes and modular Terraform:*
+*Modular organization using Helm Charts for Kubernetes and Terraform for Infrastructure:*
 
 ---
 
 ## 🛡️ Robust CI/CD Pipeline (DevSecOps)
 
-The pipeline is designed with a **"Shift-Left"** security approach, ensuring no code reaches production without passing strict automated gates inside GitHub Actions.
+The pipeline implements a **"Shift-Left"** security approach, ensuring no code reaches production without passing automated gates.
 
 ### Pipeline Flow:
 
-We separate the lifecycle into two main stages: **Integration & Security** followed by **Automated Deployment**.
+The lifecycle is divided into **Integration & Security** testing followed by **Automated Deployment** to EKS.
 
-### Pipeline Highlights:
+### Quality & Security Gates:
 
-1. **Security Scanning (Trivy):** Scans the container image for CVEs (Critical/High) before building.
-2. **Ephemeral Integration Testing (Kind):** Spins up a real **Kubernetes in Docker (Kind)** cluster inside the CI runner.
-3. **Smoke Tests:** Deploys a temporary Postgres DB and the App to verify connectivity and stability *before* touching the cloud.
+1. **Security Scanning (Trivy):** Scans the container image for CVEs before the build completes.
+2. **Ephemeral Testing (Kind):** Spins up a **Kubernetes in Docker (Kind)** cluster inside the CI runner to test the deployment in a real environment.
+3. **Smoke Tests:** Deploys a temporary Postgres DB and the App to verify connectivity *before* pushing to AWS.
 
 ---
 
 ## 🚀 Kubernetes Scaling & Reliability
 
-The application runs on **Amazon EKS** and is configured for high availability using **Horizontal Pod Autoscaler (HPA)**.
+The application is hosted on **Amazon EKS** with high availability and automated scaling.
 
 ### Horizontal Pod Autoscaler (HPA)
 
-The system automatically scales the number of pods based on CPU utilization to handle increased data processing loads.
+The system automatically scales application pods based on real-time CPU utilization.
 
-**Proof of Autoscaling Configuration:**
+**Autoscaling Proof:**
 
 ---
 
@@ -64,32 +64,25 @@ The system automatically scales the number of pods based on CPU utilization to h
 | Category | Technology | Usage |
 | --- | --- | --- |
 | **Cloud** | AWS | EKS, RDS, S3, SQS, VPC, IAM |
-| **IaC** | Terraform | Full environment provisioning with Remote State (S3) |
+| **IaC** | Terraform | Full environment provisioning with S3 Remote State |
 | **Orchestration** | Kubernetes | Helm Charts, HPA, Deployments, Services |
-| **CI/CD** | GitHub Actions | Automation, Trivy Security, Kind Integration Tests |
-| **Database** | PostgreSQL | With PostGIS extension for spatial queries |
+| **CI/CD** | GitHub Actions | Trivy Security, Kind Integration Tests |
+| **Database** | PostgreSQL | PostGIS extension for geospatial storage |
 | **Backend** | Python (Flask) | REST API & SQS Worker |
 
 ---
 
 ## 📸 End-to-End Demo
 
-### The Result: Live Dashboard
+### Live Dashboard
 
-After uploading a GeoJSON file to S3, the pipeline processes it automatically, and the dashboard updates in real-time with the new data points.
+The final result: A live dashboard updating automatically as data is processed through the pipeline.
 
 ---
 
 ## 💻 How to Run
 
-1. **Clone the Repo:**
-```bash
-git clone https://github.com/your-repo/geo-sre.git
-
-```
-
-
-2. **Infrastructure Up:**
+1. **Provision Infrastructure:**
 ```bash
 cd iac
 terraform init && terraform apply
@@ -97,6 +90,12 @@ terraform init && terraform apply
 ```
 
 
-3. **Deploy (Automatic):**
-Pushing to `main` triggers the pipeline, runs tests, and deploys to EKS.
+2. **Deploy:**
+Pushing to the `main` branch triggers the automated CI/CD pipeline.
 
+---
+
+
+3. ברגע שתעשה Commit ו-Push, גיטהאב יזהה את הנתיב `geo_images/filename.png` ויציג את התמונה בצורה ויזואלית.
+
+האם תרצה שנתחיל לעבוד על מסמך ה-**Half-pager** להגשה?
