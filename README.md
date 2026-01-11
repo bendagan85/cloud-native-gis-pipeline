@@ -11,7 +11,7 @@
 
 **Geo-SRE** is a production-grade, event-driven DevOps project designed to ingest, validate, and visualize geospatial data automatically.
 
-Unlike standard web apps, this project focuses on **Infrastructure reliability, Security, and Automation**. It features a "Zero-Touch" workflow where data uploaded to S3 triggers a complex chain of events, processed securely inside a private Kubernetes network, and visualized in real-time.
+Unlike standard web apps, this project focuses on **Infrastructure reliability, Security, and Automation**. It features a near zero-touch workflow where data uploaded to S3 triggers a complex chain of events, processed securely inside a private Kubernetes network, and visualized in real-time.
 
 ---
 
@@ -40,7 +40,7 @@ The entire environment is provisioned via **Terraform** (IaC) and follows strict
 
 ## ⚖️ Design Decisions
 
-- SQS + EKS Workers were chosen over AWS Lambda to allow better control over scaling and retries.
+- SQS + EKS Workers were chosen over AWS Lambda to allow better control over scaling and retries when handling S3-driven ingestion events.
 - This architecture enables realistic end-to-end testing using Kind during CI, closely matching the production environment.
 
 ---
@@ -105,6 +105,7 @@ After uploading a GeoJSON file to S3, the pipeline processes it automatically, a
     ```
 3.  **Deploy (Automatic):**
     Pushing to `main` triggers the pipeline, runs tests, and deploys to EKS.
+
 
 
 
