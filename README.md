@@ -83,12 +83,6 @@ After uploading a GeoJSON file to S3, the pipeline processes it automatically, a
 
 ![Dashboard Success](geo_images/dashboard.png)
 
-### Database Verification
-Direct query to the RDS instance confirming the spatial data persistence.
-
-![DB Query](geo_images/from.png)
-
----
 
 ## 💻 How to Run
 
@@ -103,3 +97,4 @@ Direct query to the RDS instance confirming the spatial data persistence.
     ```
 3.  **Deploy (Automatic):**
     Pushing to `main` triggers the pipeline, runs tests, and deploys to EKS.
+
