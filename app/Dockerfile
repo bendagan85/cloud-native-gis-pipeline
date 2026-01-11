@@ -1,10 +1,11 @@
 FROM public.ecr.aws/lambda/python:3.11
 
-# --- הוספת השורה הזו: תיקון חורי אבטחה במערכת ההפעלה ---
-# מעדכן את ספריית glib2 לגרסה האחרונה והמאובטחת
-RUN yum update -y glib2
+# --- עדכון אבטחה גורף ---
+# במקום לתקן חבילה ספציפית, אנחנו מעדכנים את כל מערכת ההפעלה
+# זה יתקן את libpng, glib2 וכל פרצת אבטחה עתידית שתתגלה בלינוקס הזה
+RUN yum update -y
 
-# העתקת קובץ הדרישות והתקנת ספריות
+# העתקת קובץ הדרישות והתקנת ספריות פייתון
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 RUN pip install -r requirements.txt
 
