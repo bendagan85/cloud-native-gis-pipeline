@@ -1,4 +1,18 @@
-# --- IAM Role (הזהות של הלמבדה) ---
+# iac/compute.tf
+
+# --- 1. פתרון הביצה והתרנגולת: דחיפת אימג' ראשוני ---
+resource "null_resource" "push_initial_image" {
+  # תלות: מחכים שה-ECR יווצר קודם
+  depends_on = [aws_ecr_repository.app_repo]
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    # התיקון: שרשור הפקודות לשורה אחת כדי למנוע בעיות של ווינדוס/לינוקס (\r)
+    command = "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${aws_ecr_repository.app_repo.repository_url} && docker pull hello-world:latest && docker tag hello-world:latest ${aws_ecr_repository.app_repo.repository_url}:latest && docker push ${aws_ecr_repository.app_repo.repository_url}:latest"
+  }
+}
+
+# --- 2. IAM Role (הזהות של הלמבדה) ---
 resource "aws_iam_role" "lambda_role" {
   name = "${var.environment}-lambda-role"
 
@@ -36,16 +50,19 @@ resource "aws_iam_role_policy" "s3_access" {
   })
 }
 
-# --- Lambda Function (הקונטיינר שלנו) ---
+# --- 3. Lambda Function (הקונטיינר שלנו) ---
 resource "aws_lambda_function" "processor" {
   function_name = "${var.environment}-geo-processor"
   role          = aws_iam_role.lambda_role.arn
   package_type  = "Image"
   
+  # תלות קריטית: לא ליצור את הלמבדה לפני שדחפנו את האימג' הראשוני!
+  depends_on = [null_resource.push_initial_image]
+   
   # שימוש בכתובת ה-ECR שיצרנו + התגית latest
   image_uri     = "${aws_ecr_repository.app_repo.repository_url}:latest"
-  
-  timeout       = 60  # נותן לו דקה לעבד קובץ (אפשר להגדיל)
+   
+  timeout       = 60  # נותן לו דקה לעבד קובץ
   memory_size   = 512 # חצי ג'יגה זיכרון
 
   # חיבור לרשת (כדי שיוכל לדבר עם ה-RDS ב-Private Subnet)
@@ -54,18 +71,18 @@ resource "aws_lambda_function" "processor" {
     security_group_ids = [aws_security_group.app_sg.id]
   }
 
-  # משתני סביבה (הסודות עוברים מכאן לקוד)
+  # משתני סביבה
   environment {
     variables = {
       DB_HOST = aws_db_instance.postgres.address
       DB_NAME = aws_db_instance.postgres.db_name
       DB_USER = aws_db_instance.postgres.username
-      DB_PASS = aws_db_instance.postgres.password # (בפרודקשן אמיתי היינו מושכים מ-Secrets Manager)
+      DB_PASS = aws_db_instance.postgres.password
     }
   }
 }
 
-# --- S3 Trigger (ההדק) ---
+# --- 4. S3 Trigger (ההדק) ---
 # נותן ל-S3 רשות להפעיל את הלמבדה
 resource "aws_lambda_permission" "allow_s3" {
   statement_id  = "AllowExecutionFromS3"

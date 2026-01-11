@@ -31,7 +31,7 @@ resource "aws_iam_role" "eks_node_role" {
   })
 }
 
-# חיבור הרשאות קריטיות ל-Nodes (כדי שיוכלו למשוך אימג'ים ולהריץ פודים)
+# חיבור הרשאות קריטיות ל-Nodes
 resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
   role       = aws_iam_role.eks_node_role.name
@@ -53,7 +53,7 @@ resource "aws_eks_cluster" "main" {
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
-    # הקלאסטר צריך גישה גם לרשת הפרטית (ל-Nodes) וגם לציבורית (לגישה שלנו)
+    # הקלאסטר עצמו צריך לראות את כולם
     subnet_ids = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
   }
 
@@ -67,17 +67,18 @@ resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${var.environment}-node-group"
   node_role_arn   = aws_iam_role.eks_node_role.arn
-  subnet_ids      = aws_subnet.private[*].id # שים לב: ה-Nodes יושבים ברשת הפרטית (מאובטח!)
+  
+  # 👇 חזרנו למצב המאובטח: רשת פרטית בלבד!
+  subnet_ids      = aws_subnet.private[*].id 
 
   scaling_config {
-    desired_size = 2 # מתחילים עם 2 שרתים
-    max_size     = 3 # יכול לגדול ל-3 בעומס
+    desired_size = 2
+    max_size     = 3
     min_size     = 1
   }
 
-  # שימוש ב-Spot Instances (חוסך 70-90% מהעלות!)
   capacity_type  = "SPOT"
-  instance_types = ["t3.small"] # t3.micro קטן מדי לקוברנטיס, t3.small זה המינימום
+  instance_types = ["t3.small"]
 
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,

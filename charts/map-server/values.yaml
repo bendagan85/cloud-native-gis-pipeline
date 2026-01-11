@@ -1,0 +1,27 @@
+# מספר הרפליקות ההתחלתי
+replicaCount: 2
+
+image:
+  repository: nginx
+  pullPolicy: IfNotPresent
+  # אפשר לשנות לגרסה ספציפית כשיהיה לך אימג' אמיתי
+  tag: "latest"
+
+service:
+  type: LoadBalancer
+  port: 80
+
+resources: 
+  # הגבלת משאבים (חובה בשביל HPA)
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 50

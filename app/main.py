@@ -1,42 +1,37 @@
-import json
 import os
-import boto3
-import psycopg2
-from psycopg2 import sql
+import json
 import logging
+import psycopg2
+from flask import Flask, request, jsonify
 
-# הגדרת לוגים (CloudWatch אוהב את זה)
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# --- הגדרת השרת ---
+app = Flask(__name__)
 
-# שליפת משתני סביבה (הסיסמאות יגיעו מכאן, לא מהקוד)
+# לוגים (זה הולך ל-CloudWatch אוטומטית ב-EKS)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("GeoApp")
+
+# משתני סביבה
 DB_HOST = os.environ.get('DB_HOST')
 DB_NAME = os.environ.get('DB_NAME')
 DB_USER = os.environ.get('DB_USER')
 DB_PASS = os.environ.get('DB_PASS')
 
-s3_client = boto3.client('s3')
-
 def get_db_connection():
-    """יצירת חיבור למסד הנתונים"""
-    conn = psycopg2.connect(
+    return psycopg2.connect(
         host=DB_HOST,
         database=DB_NAME,
         user=DB_USER,
         password=DB_PASS
     )
-    return conn
 
 def init_db():
-    """וידוא שהטבלה והתוסף PostGIS קיימים"""
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """אתחול הטבלה והרחבת PostGIS"""
     try:
-        # 1. הפעלת תוסף PostGIS
+        conn = get_db_connection()
+        conn.autocommit = True
+        cur = conn.cursor()
         cur.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
-        
-        # 2. יצירת טבלה אם לא קיימת
-        # שים לב: אנחנו שומרים את הגיאומטריה כסוג GEOGRAPHY או GEOMETRY
         cur.execute("""
             CREATE TABLE IF NOT EXISTS geospatial_data (
                 id SERIAL PRIMARY KEY,
@@ -45,70 +40,73 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        conn.commit()
-        logger.info("Database initialized successfully (PostGIS + Table).")
-    except Exception as e:
-        logger.error(f"Error initializing DB: {e}")
-        conn.rollback()
-    finally:
+        logger.info("DB Initialized successfully")
         cur.close()
         conn.close()
+    except Exception as e:
+        logger.error(f"DB Init Error: {e}")
 
-def lambda_handler(event, context):
-    """
-    זו הפונקציה הראשית שתרוץ כשקובץ עולה ל-S3
-    """
-    # אתחול ה-DB בריצה הראשונה
-    init_db()
-
-    # שליפת שם הדלי והקובץ מתוך האירוע (Event)
-    # זה עובד גם בלמבדה וגם בסימולציה מקומית
+# --- נתיב 1: התצוגה (מה שרואים בדפדפן) ---
+@app.route('/', methods=['GET'])
+def index():
     try:
-        for record in event['Records']:
-            bucket = record['s3']['bucket']['name']
-            key = record['s3']['object']['key']
-            
-            logger.info(f"Processing file: {key} from bucket: {bucket}")
+        # בדיקה כמה שורות יש בטבלה
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT count(*) FROM geospatial_data;")
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        
+        # HTML פשוט ויפה שמראה שהכל עובד
+        return f"""
+        <html>
+            <body style="font-family: Arial; text-align: center; padding-top: 50px;">
+                <h1 style="color: #2c3e50;">🌍 ASTERRA Geo-App (Kubernetes)</h1>
+                <p>Status: <strong>Online</strong></p>
+                <div style="border: 2px solid #27ae60; display: inline-block; padding: 20px; border-radius: 10px;">
+                    <h2>Processed Records in DB</h2>
+                    <h1 style="color: #27ae60; font-size: 50px; margin: 0;">{count}</h1>
+                </div>
+                <p style="color: gray; margin-top: 20px;">Powered by Flask, PostGIS & EKS</p>
+            </body>
+        </html>
+        """, 200
+    except Exception as e:
+        return f"Error connecting to DB: {str(e)}", 500
 
-            # הורדת הקובץ מ-S3 לזיכרון
-            response = s3_client.get_object(Bucket=bucket, Key=key)
-            file_content = response['Body'].read().decode('utf-8')
-            geojson_data = json.loads(file_content)
+# --- נתיב 2: קליטת נתונים (Ingest) ---
+@app.route('/ingest', methods=['POST'])
+def ingest():
+    try:
+        data = request.json
+        if 'features' not in data:
+            return jsonify({"error": "Invalid GeoJSON"}), 400
 
-            # ולידציה בסיסית
-            if 'features' not in geojson_data:
-                logger.error("Invalid GeoJSON: No 'features' found.")
-                continue
-
-            # שמירה לדאטה-בייס
-            conn = get_db_connection()
-            cur = conn.cursor()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        inserted = 0
+        for feature in data['features']:
+            geom = json.dumps(feature['geometry'])
+            props = json.dumps(feature['properties'])
             
-            count = 0
-            for feature in geojson_data['features']:
-                geom = json.dumps(feature['geometry'])
-                props = json.dumps(feature['properties'])
-                
-                # שאילתת SQL חכמה שממירה GeoJSON ישר לפורמט של PostGIS
-                insert_query = """
-                    INSERT INTO geospatial_data (properties, geom)
-                    VALUES (%s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326));
-                """
-                cur.execute(insert_query, (props, geom))
-                count += 1
+            # שאילתה חכמה של PostGIS
+            query = "INSERT INTO geospatial_data (properties, geom) VALUES (%s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))"
+            cur.execute(query, (props, geom))
+            inserted += 1
             
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            logger.info(f"Successfully loaded {count} features from {key}")
-
-        return {"statusCode": 200, "body": "Success"}
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        logger.info(f"Inserted {inserted} records.")
+        return jsonify({"status": "success", "count": inserted}), 200
 
     except Exception as e:
-        logger.error(f"Error processing S3 event: {e}")
-        return {"statusCode": 500, "body": str(e)}
+        logger.error(f"Ingest Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
-# קוד בדיקה מקומי (אם מריצים את הקובץ ידנית במחשב)
 if __name__ == "__main__":
-    print("This script is designed to run as a Lambda handler or Container task.")
+    init_db()
+    app.run(host='0.0.0.0', port=5000)
