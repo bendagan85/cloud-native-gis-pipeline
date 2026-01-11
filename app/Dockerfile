@@ -1,18 +1,28 @@
-FROM public.ecr.aws/lambda/python:3.11
+# משתמשים באימג' פייתון רשמי וקל משקל (הרבה יותר ידידותי ל-GeoPandas)
+FROM python:3.11-slim
 
-# --- 1. התיקון לשגיאת הבנייה (GCC) ---
-# אנחנו מתקינים כלי פיתוח (gcc, c++) כדי ש-numpy ו-geopandas יוכלו להתקין את עצמם
-RUN yum update -y && \
-    yum install -y gcc gcc-c++ python3-devel
+# הגדרת תיקיית העבודה (סטנדרט של דוקר)
+WORKDIR /app
 
-# העתקת קובץ הדרישות והתקנת ספריות פייתון
-COPY requirements.txt ${LAMBDA_TASK_ROOT}
-RUN pip install -r requirements.txt
+# התקנת כלי מערכת בסיסיים שיעזרו בבנייה (GCC וכד')
+# אלו פקודות של Debian/Ubuntu ולא של Amazon Linux
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# העתקת קובץ הדרישות והתקנה
+COPY requirements.txt .
+# --no-cache-dir מונע מהאימג' להתנפח סתם
+RUN pip install --no-cache-dir -r requirements.txt
 
 # העתקת הקוד שלנו
-COPY main.py ${LAMBDA_TASK_ROOT}
+COPY main.py .
 
-# --- 2. התיקון עבור קוברנטיס ו-Flask ---
-# שינינו את זה מ-CMD שמפעיל handler ל-ENTRYPOINT שמריץ את פייתון ישירות.
-# זה יגרום לשרת (app.run) לרוץ מיד כשהפוד עולה ולהאזין לפורט 5000.
-ENTRYPOINT [ "python", "main.py" ]
+# חשיפת הפורט (דוקומנטציה בלבד, אבל טוב שיהיה)
+EXPOSE 5000
+
+# הרצת השרת
+# שים לב: אנחנו מריצים את main.py ישירות
+CMD ["python", "main.py"]
