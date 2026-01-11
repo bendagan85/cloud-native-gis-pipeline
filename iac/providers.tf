@@ -5,6 +5,13 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # 👇👇👇 החלק החדש: חיבור ל-S3 שיצרת 👇👇👇
+  backend "s3" {
+    bucket = "project-tf-state-ben-devops"
+    key    = "prod/terraform.tfstate"
+    region = "us-east-1"
+  }
 }
 
 provider "aws" {
