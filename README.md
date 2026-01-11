@@ -96,7 +96,7 @@ After uploading a GeoJSON file to S3, the pipeline processes it automatically, a
 
 1.  **Clone the Repo:**
     ```bash
-    git clone [https://github.com/your-repo/geo-sre.git](https://github.com/your-repo/geo-sre.git)
+    git clone https://github.com/bendagan85/cloud-native-gis-pipeline
     ```
 2.  **Infrastructure Up:**
     ```bash
@@ -105,6 +105,7 @@ After uploading a GeoJSON file to S3, the pipeline processes it automatically, a
     ```
 3.  **Deploy (Automatic):**
     Pushing to `main` triggers the pipeline, runs tests, and deploys to EKS.
+
 
 
 
