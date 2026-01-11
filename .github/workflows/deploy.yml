@@ -1,102 +1,62 @@
-name: CI/CD Pipeline with Security & Testing
-
-on:
-  push:
-    branches:
-      - main
-
-env:
-  ECR_REPOSITORY: asterra-geo-app
-  LAMBDA_FUNCTION_NAME: dev-geo-processor
-
-jobs:
-  # --- שלב 1: בדיקות אבטחה ואינטגרציה (לפני הענן) ---
-  integration-test-and-security:
+integration-test-and-security:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. בניית האימג' באופן מקומי לצורך הבדיקה
       - name: Build Docker Image locally
         run: docker build -t local-test:latest ./app
 
-      # 2. סריקת אבטחה (Trivy)
-      # בודק אם יש חולשות אבטחה קריטיות בקונטיינר
+      # סריקת אבטחה (כבר עובד לך)
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'local-test:latest'
           format: 'table'
-          exit-code: '1' # מכשיל את הריצה אם נמצאו בעיות
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
-      # 3. הרמת קלאסטר קוברנטיס מקומי (Kind)
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.4.0
 
-      # 4. טעינת האימג' לתוך הקלאסטר
       - name: Load Image into Kind
         run: |
           kind load docker-image local-test:latest
 
-      # 5. בדיקת הרצה (Smoke Test)
-      # מרימים Postgres זמני ואת האפליקציה כדי לראות שהיא עולה ולא קורסת
       - name: Run Smoke Test on Kind
         run: |
-          # הרמת DB זמני
+          # 1. מרימים Postgres זמני
           kubectl run postgres --image=postgres:13 --env="POSTGRES_PASSWORD=test" --env="POSTGRES_DB=testdb" --expose --port=5432
           kubectl wait --for=condition=Ready pod/postgres --timeout=60s
 
-          # הרמת האפליקציה שלנו (משתמשים ב-kubectl run פשוט לצורך הבדיקה)
-          kubectl run app-test --image=local-test:latest --image-pull-policy=Never \
+          # 2. מרימים את האפליקציה שלנו עם restartPolicy=Never
+          # זה התיקון החשוב! מונע את השגיאה כשהסקריפט מסיים לרוץ
+          kubectl run app-test --image=local-test:latest --image-pull-policy=Never --restart=Never \
             --env="DB_HOST=postgres" \
             --env="DB_USER=postgres" \
             --env="DB_PASS=test" \
             --env="DB_NAME=testdb"
 
-          # מחכים לראות שהפוד מצליח לעלות (Running) ולא נכנס ל-CrashLoopBackOff
-          # הערה: מכיוון שזו אפליקציה שמסיימת לרוץ מהר, אנחנו בודקים שהיא לא נכשלה מיידית
-          sleep 10
+          # 3. מחכים שהפוד יסיים בהצלחה (Completed)
+          # אנחנו נותנים לו 30 שניות לסיים את הריצה הקצרה שלו
+          echo "Waiting for pod to complete..."
+          kubectl wait --for=condition=Ready pod/app-test --timeout=30s || true 
+          
+          # 4. בדיקת תוצאות
+          # אנחנו בודקים שהסטטוס הוא 'Completed' או 'Running' ושאין שגיאות
+          sleep 5
           kubectl get pods
           
-          # אם הפוד במצב Error או CrashLoopBackOff, הפקודה הזו תכשיל את הפייפליין
-          kubectl get pod app-test | grep -v "Error" | grep -v "CrashLoopBackOff"
+          POD_STATUS=$(kubectl get pod app-test -o jsonpath="{.status.phase}")
+          echo "Pod Status: $POD_STATUS"
 
-  # --- שלב 2: פריסה לענן (רץ רק אם שלב 1 עבר) ---
-  deploy-to-aws:
-    needs: integration-test-and-security # <--- זה החלק הקריטי!
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
-
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-
-    - name: Build, tag, and push image to Amazon ECR
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./app
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./app
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-    - name: Update Lambda Code
-      run: |
-        aws lambda update-function-code \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-          --image-uri ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          if [[ "$POD_STATUS" == "Succeeded" || "$POD_STATUS" == "Running" ]]; then
+            echo "✅ Smoke Test Passed: App started and finished successfully."
+            exit 0
+          else
+            echo "❌ Smoke Test Failed: Pod status is $POD_STATUS"
+            kubectl logs app-test
+            exit 1
+          fi
