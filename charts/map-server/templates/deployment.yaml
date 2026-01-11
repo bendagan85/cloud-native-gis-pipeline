@@ -20,7 +20,17 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 5000  # תיקון מס' 1: שינוי לפורט של Flask
               protocol: TCP
+          # תיקון מס' 2: הוספת הבלוק שמעביר את הסיסמה והכתובת לקוד
+          env:
+            - name: DB_HOST
+              value: {{ .Values.database.host | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: DB_USER
+              value: {{ .Values.database.user | quote }}
+            - name: DB_PASS
+              value: {{ .Values.database.password | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

@@ -51,6 +51,7 @@ resource "aws_iam_role_policy" "s3_access" {
 }
 
 # --- 3. Lambda Function (הקונטיינר שלנו) ---
+# הערה: אנחנו עוברים לעבוד עם K8s Worker, אבל נשאיר את הלמבדה בינתיים כדי לא לשבור תלויות, היא פשוט לא תופעל אוטומטית.
 resource "aws_lambda_function" "processor" {
   function_name = "${var.environment}-geo-processor"
   role          = aws_iam_role.lambda_role.arn
@@ -58,10 +59,10 @@ resource "aws_lambda_function" "processor" {
   
   # תלות קריטית: לא ליצור את הלמבדה לפני שדחפנו את האימג' הראשוני!
   depends_on = [null_resource.push_initial_image]
-   
+    
   # שימוש בכתובת ה-ECR שיצרנו + התגית latest
   image_uri     = "${aws_ecr_repository.app_repo.repository_url}:latest"
-   
+    
   timeout       = 60  # נותן לו דקה לעבד קובץ
   memory_size   = 512 # חצי ג'יגה זיכרון
 
@@ -82,25 +83,5 @@ resource "aws_lambda_function" "processor" {
   }
 }
 
-# --- 4. S3 Trigger (ההדק) ---
-# נותן ל-S3 רשות להפעיל את הלמבדה
-resource "aws_lambda_permission" "allow_s3" {
-  statement_id  = "AllowExecutionFromS3"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.processor.function_name
-  principal     = "s3.amazonaws.com"
-  source_arn    = aws_s3_bucket.ingest_bucket.arn
-}
-
-# מגדיר שכל קובץ עם סיומת .json או .geojson יפעיל את הלמבדה
-resource "aws_s3_bucket_notification" "bucket_notification" {
-  bucket = aws_s3_bucket.ingest_bucket.id
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.processor.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".geojson"
-  }
-
-  depends_on = [aws_lambda_permission.allow_s3]
-}
+# --- 4. S3 Trigger (הוסר) ---
+# החלק הזה נמחק מכאן כי הוא עבר לקובץ storage.tf ומכוון עכשיו ל-SQS במקום ללמבדה.
