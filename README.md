@@ -48,7 +48,8 @@ The pipeline is designed with a **"Shift-Left"** security approach. No code reac
 3.  **Smoke Tests:** Deploys a temporary Postgres DB and the App to verify connectivity and stability *before* touching the cloud.
 
 ![CI/CD Pipeline Visualization](geo_images/advencedpipeline.png)
-(geo_images/githubpipeline.png)
+![GitHub Pipeline](geo_images/githubpipeline.png)
+
 ---
 
 ## 🚀 Kubernetes Scaling & Reliability
@@ -97,5 +98,6 @@ After uploading a GeoJSON file to S3, the pipeline processes it automatically, a
     ```
 3.  **Deploy (Automatic):**
     Pushing to `main` triggers the pipeline, runs tests, and deploys to EKS.
+
 
 
