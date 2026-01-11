@@ -33,10 +33,13 @@ jobs:
 
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.4.0
+        with:
+          cluster_name: kind   # <--- הוספתי כאן: קביעת שם מפורש לקלאסטר
 
       - name: Load Image into Kind
         run: |
-          kind load docker-image local-test:latest
+          # <--- הוספתי בסוף השורה: --name kind
+          kind load docker-image local-test:latest --name kind
 
       - name: Run Smoke Test on Kind
         run: |
@@ -45,7 +48,6 @@ jobs:
           kubectl wait --for=condition=Ready pod/postgres --timeout=60s
 
           # 2. מרימים את האפליקציה שלנו עם restartPolicy=Never
-          # זה מונע את השגיאה כשהסקריפט מסיים לרוץ
           kubectl run app-test --image=local-test:latest --image-pull-policy=Never --restart=Never \
             --env="DB_HOST=postgres" \
             --env="DB_USER=postgres" \
