@@ -26,10 +26,15 @@ The entire environment is provisioned via **Terraform** (IaC) and follows strict
 4.  **Storage:** Data is written to AWS RDS (PostgreSQL + PostGIS).
 5.  **Visualization:** Flask App serves live data via Load Balancer.
 
+### Infrastructure (AWS EKS)
+*The active Kubernetes cluster provisioned by Terraform:*
+
+![EKS Cluster](geo_images/eks.png)
+
 ### 📂 Project Structure
 *Organized for maintainability using Helm Charts for Kubernetes and modular Terraform.*
 
-![VS Code Structure](images/vsfiles.png)
+![VS Code Structure](geo_images/vsfiles.png)
 
 ---
 
@@ -42,7 +47,7 @@ The pipeline is designed with a **"Shift-Left"** security approach. No code reac
 2.  **Ephemeral Integration Testing (Kind):** Spins up a real **Kubernetes in Docker (Kind)** cluster inside the CI runner.
 3.  **Smoke Tests:** Deploys a temporary Postgres DB and the App to verify connectivity and stability *before* touching the cloud.
 
-![CI/CD Pipeline Visualization](images/advencedpipeline.png)
+![CI/CD Pipeline Visualization](geo_images/advencedpipeline.png)
 
 ---
 
@@ -54,7 +59,7 @@ The application runs on **Amazon EKS** and is configured for high availability.
 The system automatically scales the number of pods based on CPU utilization. If the data processing load increases, Kubernetes spins up more workers instantly.
 
 **Proof of Autoscaling Configuration:**
-![HPA Proof](images/hpaproof.png)
+![HPA Proof](geo_images/hpaproof.png)
 
 ---
 
@@ -76,12 +81,12 @@ The system automatically scales the number of pods based on CPU utilization. If 
 ### The Result: Live Dashboard
 After uploading a GeoJSON file to S3, the pipeline processes it automatically, and the dashboard updates in real-time with the new data points.
 
-![Dashboard Success](images/dashboard.png)
+![Dashboard Success](geo_images/dashboard.png)
 
 ### Database Verification
 Direct query to the RDS instance confirming the spatial data persistence.
 
-![DB Query](images/from.png)
+![DB Query](geo_images/from.png)
 
 ---
 
