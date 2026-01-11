@@ -38,6 +38,13 @@ The entire environment is provisioned via **Terraform** (IaC) and follows strict
 
 ---
 
+## ⚖️ Design Decisions
+
+- SQS + EKS Workers were chosen over AWS Lambda to allow better control over scaling and retries.
+- This architecture enables realistic end-to-end testing using Kind during CI, closely matching the production environment.
+
+---
+
 ## 🛡️ Robust CI/CD Pipeline (DevSecOps)
 
 The pipeline is designed with a **"Shift-Left"** security approach. No code reaches production without passing strict automated gates inside GitHub Actions.
@@ -98,6 +105,7 @@ After uploading a GeoJSON file to S3, the pipeline processes it automatically, a
     ```
 3.  **Deploy (Automatic):**
     Pushing to `main` triggers the pipeline, runs tests, and deploys to EKS.
+
 
 
 
